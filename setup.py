@@ -188,9 +188,9 @@ setup(
     packages=find_packages(exclude=('tests',)),
     # If your package is a single module, use this instead of 'packages':
     # py_modules=['deephyper'],
-    # entry_points={
-    #     'console_scripts': ['mycli=mymodule:cli'],
-    # },
+     entry_points={
+         'console_scripts': ['deephyper = deephyper.cli.balsam_cli:main'],
+     },
     install_requires=REQUIRED,
     extras_require=EXTRAS,
     include_package_data=True,

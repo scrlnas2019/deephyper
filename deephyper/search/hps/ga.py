@@ -16,11 +16,6 @@ def on_exit(signum, stack):
     EXIT_FLAG = True
 
 class GA(Search):
-    def __init__(self, problem, run, evaluator, **kwargs):
-        super().__init__(problem, run, evaluator, **kwargs)
-        logger.info("Initializing GA")
-        self.optimizer = GAOptimizer(self.problem, self.num_workers, self.args)
-
     @staticmethod
     def _extend_parser(parser):
         parser.add_argument('--ga_num_gen',
@@ -35,6 +30,8 @@ class GA(Search):
         return parser
 
     def run(self):
+        logger.info("Initializing GA")
+        self.optimizer = GAOptimizer(self.problem, self.num_workers, self.args)
         # opt = GAOptimizer(cfg)
         # evaluator = evaluate.create_evaluator(cfg)
         logger.info(f"Starting new run")
@@ -53,7 +50,7 @@ class GA(Search):
             logger.info(f"{self.optimizer.INIT_POP_SIZE} individuals")
             self.optimizer.pop = self.optimizer.toolbox.population(n=self.optimizer.INIT_POP_SIZE)
             individuals = self.optimizer.pop
-            self.evaluate_fitnesses(individuals, self.optimizer, self.evaluator, self.args.eval_timeout_minutes)
+            self.evaluate_fitnesses(individuals, self.optimizer, self.evaluator)
             self.optimizer.record_generation(num_evals=len(self.optimizer.pop))
 
             with open('ga_logbook.log', 'w') as fp:
@@ -85,8 +82,7 @@ class GA(Search):
             # Evaluate the individuals with an invalid fitness
             invalid_ind = [ind for ind in offspring if not ind.fitness.valid]
             logger.info(f"Evaluating {len(invalid_ind)} invalid individuals")
-            self.evaluate_fitnesses(invalid_ind, self.optimizer, self.evaluator,
-                    self.args.eval_timeout_minutes)
+            self.evaluate_fitnesses(invalid_ind, self.optimizer, self.evaluator)
 
             # The population is entirely replaced by the offspring
             self.optimizer.pop[:] = offspring
@@ -97,7 +93,7 @@ class GA(Search):
                 fp.write(str(self.optimizer.logbook))
             print("best:", self.optimizer.halloffame[0])
 
-    def evaluate_fitnesses(self, individuals, opt, evaluator, timeout_minutes):
+    def evaluate_fitnesses(self, individuals, opt, evaluator, timeout_minutes=600):
         points = map(opt.space_encoder.decode_point, individuals)
         points = [{key:x for key,x in zip(self.problem.space.keys(), point)}
                   for point in points]

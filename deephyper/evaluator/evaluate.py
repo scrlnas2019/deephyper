@@ -12,6 +12,7 @@ import time
 import types
 
 from deephyper.evaluator import runner
+from deephyper.search.util import generic_loader
 logger = logging.getLogger(__name__)
 
 class Encoder(json.JSONEncoder):
@@ -33,14 +34,26 @@ class Evaluator:
     WORKERS_PER_NODE = int(os.environ.get('DEEPHYPER_WORKERS_PER_NODE', 1))
     KERAS_BACKEND = os.environ.get('KERAS_BACKEND', 'tensorflow')
     os.environ['KERAS_BACKEND'] = KERAS_BACKEND
+    EVALUATOR_CHOICES = ['balsam', 'balsam-direct', 'subprocess', 'processPool', 'threadPool']
     assert os.path.isfile(PYTHON_EXE)
 
     @staticmethod
-    def create(run_function, cache_key=None, method='balsam'):
-        assert method in ['balsam', 'subprocess', 'processPool', 'threadPool']
+    def create(run, cache_key=None, method='balsam'):
+        '''
+        Args:
+            run: string commandline OR Python Callable object
+        '''
+        assert method in EVALUATOR_CHOICES
+
+        if method != 'balsam-direct': assert callable(run)
+        else: assert isinstance(run, str)
+
         if method == "balsam":
             from deephyper.evaluator._balsam import BalsamEvaluator
             Eval = BalsamEvaluator
+        elif method == "balsam-direct":
+            from deephyper.evaluator._balsam_direct import BalsamDirectEvaluator
+            Eval = BalsamDirectEvaluator
         elif method == "subprocess":
             from deephyper.evaluator._subprocess import SubprocessEvaluator
             Eval = SubprocessEvaluator
@@ -51,9 +64,9 @@ class Evaluator:
             from deephyper.evaluator._threadPool import ThreadPoolEvaluator
             Eval = ThreadPoolEvaluator
 
-        return Eval(run_function, cache_key=cache_key)
+        return Eval(run, cache_key=cache_key)
 
-    def __init__(self, run_function, cache_key=None):
+    def __init__(self, run, cache_key=None):
         self.pending_evals = {} # uid --> Future
         self.finished_evals = OrderedDict() # uid --> scalar
         self.requested_evals = [] # keys
@@ -63,7 +76,6 @@ class Evaluator:
         self._start_sec = time.time()
         self.elapsed_times = {}
 
-        self._run_function = run_function
         self.num_workers = 0
 
         if cache_key is not None:
@@ -72,11 +84,17 @@ class Evaluator:
         else:
             self._gen_uid = lambda d: self.encode(d)
 
-        moduleName = self._run_function.__module__
-        if moduleName == '__main__':
-            raise RuntimeError(f'Evaluator will not execute function "{run_function.__name__}" '
-            "because it is in the __main__ module.  Please provide a function "
-            "imported from an external module!")
+        if callable(run):
+            self._run_function = run
+            self._run_cmd = None
+            module = run.__module__
+            if moduleName == '__main__':
+                raise RuntimeError(f'Evaluator will not execute function "{run_function.__name__}" '
+                "because it is in the __main__ module.  Please provide a function "
+                "imported from an external module!")
+        else:
+            self._run_function = None
+            self._run_cmd = run
 
     def encode(self, x):
         if not isinstance(x, dict):
@@ -118,16 +136,16 @@ class Evaluator:
 
     @staticmethod
     def _parse(run_stdout):
-        y = sys.float_info.max
+        y = Evaluator.FAIL_RETURN_VALUE
         for line in run_stdout.split('\n'):
             if "DH-OUTPUT:" in line.upper():
                 try:
                     y = float(line.split()[-1])
                 except ValueError as e:
                     logger.exception("Could not parse DH-OUTPUT line:\n"+line)
-                    y = sys.float_info.max
+                    y = Evaluator.FAIL_RETURN_VALUE
                 break
-        if isnan(y): y = sys.float_info.max
+        if isnan(y): y = Evaluator.FAIL_RETURN_VALUE
         return y
 
     @property
@@ -191,11 +209,6 @@ class Evaluator:
     @property
     def counter(self):
         return len(self.finished_evals) + len(self.pending_evals)
-
-    def num_free_workers(self):
-        num_evals = len(self.pending_evals)
-        logger.debug(f"{num_evals} pending evals; {self.num_workers} workers")
-        return max(self.num_workers - num_evals, 0)
 
     def dump_evals(self):
         if not self.finished_evals: return

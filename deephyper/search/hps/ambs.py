@@ -1,4 +1,4 @@
-"""Asynchronous Model-Based Search.
+"""Asynchronous Bayesian Model-Based Search.
 
 Arguments of AMBS :
 * ``learner``
@@ -41,11 +41,6 @@ def on_exit(signum, stack):
     EXIT_FLAG = True
 
 class AMBS(Search):
-    def __init__(self, problem, run, evaluator, **kwargs):
-        super().__init__(problem, run, evaluator, **kwargs)
-        logger.info("Initializing AMBS")
-        self.optimizer = Optimizer(self.problem, self.num_workers, self.args)
-
     @staticmethod
     def _extend_parser(parser):
         parser.add_argument('--learner',
@@ -66,6 +61,8 @@ class AMBS(Search):
         return parser
 
     def main(self):
+        logger.info("Initializing AMBS")
+        self.optimizer = Optimizer(self.problem, self.num_workers, self.args)
         timer = util.DelayTimer(max_minutes=None, period=SERVICE_PERIOD)
         chkpoint_counter = 0
         num_evals = 0
@@ -80,7 +77,7 @@ class AMBS(Search):
             results = list(self.evaluator.get_finished_evals())
             num_evals += len(results)
             chkpoint_counter += len(results)
-            if EXIT_FLAG or num_evals >= self.args.max_evals:
+            if EXIT_FLAG:
                 break
             if results:
                 logger.info(f"Refitting model with batch of {len(results)} evals")

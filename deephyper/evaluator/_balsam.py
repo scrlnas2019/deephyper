@@ -14,6 +14,16 @@ from deephyper.evaluator import Evaluator
 logger = logging.getLogger(__name__)
 
 LAUNCHER_NODES = int(os.environ.get('BALSAM_LAUNCHER_NODES', 1))
+JOB_MODE = os.environ.get('BALSAM_JOB_MODE', None)
+if JOB_MODE is None:
+    logger.warning("Could not detect job mode. Assuming serial")
+    JOB_MODE = "serial"
+JOB_MODE = JOB_MODE.lower().strip()
+assert JOB_MODE in ['serial', 'mpi']
+
+logger.debug(f"Detected LAUNCHER_NODES = {LAUNCHER_NODES}")
+logger.debug(f"Detected JOB_MODE = {JOB_MODE}")
+
 class BalsamEvaluator(Evaluator):
     """Evaluator using balsam software.
 
@@ -26,16 +36,40 @@ class BalsamEvaluator(Evaluator):
     """
     def __init__(self, run_function, cache_key=None):
         super().__init__(run_function, cache_key)
-        self.id_key_map = {}
-        self.num_workers = max(1, LAUNCHER_NODES*self.WORKERS_PER_NODE - 2)
-        logger.info("Balsam Evaluator instantiated")
-        logger.debug(f"LAUNCHER_NODES = {LAUNCHER_NODES}")
-        logger.debug(f"WORKERS_PER_NODE = {self.WORKERS_PER_NODE}")
+        if dag.current_job is None:
+            raise RuntimeError("Balsam evaluator must be running inside context of a Balsam launcher")
+        self.set_run_resources()
+        if JOB_MODE == 'serial':
+            self.num_workers = max(1, LAUNCHER_NODES*self.WORKERS_PER_NODE - 2)
+            logger.debug(f"Serial mode: models per node = {self.WORKERS_PER_NODE}")
+        else:
+            run_nodes = self.run_resources['num_nodes']
+            self.num_workers = max(
+                1, 
+                (LAUNCHER_NODES - dag.current_job.num_nodes) // run_nodes
+            )
+            logger.debug(f"MPI mode: models occupy whole number of nodes")
+
         logger.debug(f"Total number of workers: {self.num_workers}")
         logger.info(f"Backend runs will use Python: {self.PYTHON_EXE}")
         self._init_app()
         logger.info(f"Backend runs will execute function: {self.appName}")
         self.transaction_context = transaction.atomic
+
+
+    def set_run_resources(self):
+        resource_defaults = {
+            'num_nodes': 1,
+            'ranks_per_node': 1,
+            'threads_per_rank': 64,
+            'node_packing_count': self.WORKERS_PER_NODE,
+        }
+        resources = dag.current_job.data.get('run_resources', {})
+        for key,val in resource_defaults.items():
+            if key not in resources: resources[key] = val
+
+        self.workflow = dag.current_job.workflow
+        self.run_resources = resources
 
     def wait(self, futures, timeout=None, return_when='ANY_COMPLETED'):
         return balsam_wait(futures, timeout=timeout, return_when=return_when)
@@ -56,26 +90,13 @@ class BalsamEvaluator(Evaluator):
     def _eval_exec(self, x):
         jobname = f"task{self.counter}"
         args = f"'{self.encode(x)}'"
-        envs = f"KERAS_BACKEND={self.KERAS_BACKEND}"
-        #envs = ":".join(f'KERAS_BACKEND={self.KERAS_BACKEND} OMP_NUM_THREADS=62 KMP_BLOCKTIME=0 KMP_AFFINITY=\"granularity=fine,compact,1,0\"'.split())
-        resources = {
-            'num_nodes': 1,
-            'ranks_per_node': 1,
-            'threads_per_rank': 64,
-            'node_packing_count': self.WORKERS_PER_NODE,
-        }
-        for key in resources:
-            if key in x: resources[key] = x[key]
-
-        if dag.current_job is not None: wf = dag.current_job.workflow
-        else: wf = self.appName
         task = dag.add_job(
                     name = jobname,
-                    workflow = wf,
+                    workflow = self.workflow,
                     application = self.appName,
                     args = args,
-                    environ_vars = envs,
-                    **resources
+                    environ_vars = os.environ.copy() # propagates to model
+                    **self.run_resources
                    )
         logger.debug(f"Created job {jobname}")
         logger.debug(f"Args: {args}")
@@ -86,21 +107,24 @@ class BalsamEvaluator(Evaluator):
 
     @staticmethod
     def _on_done(job): #def _on_done(job, process_data):
-        output = job.read_file_in_workdir(f'{job.name}.out')
-        # process_data(job)
-        #args = job.args
-        #args = args.replace("\'", "")
-        #with open('test.json', 'w') as f:
-        #    f.write(args)
-        #
-        #with open('test.json', 'r') as f:
-        #    args = json.load(f)
-        output = Evaluator._parse(output)
-        #job.data['reward'] = output
-        #job.data['arch_seq'] = args['arch_seq']
-        #job.data['id_worker'] = args['w']
-        #job.save()
-        return output
+        # Objective in job.data?
+        try: objective = float(job.data['dh-objective'])
+        except KeyError,ValueError: pass
+        else: return objective
+
+        # Objective in postprocess.log ?
+        try:
+            post_out = job.read_file_in_workdir(f'postprocess.log')
+            objective = Evaluator._parse(post_out)
+        except ValueError as e:
+            pass
+        else:
+            if objective != Evaluator.FAIL_RETURN_VALUE: return objective
+
+        # Otherwise, take what we get in {job.name}.out
+        stdout = job.read_file_in_workdir(f'{job.name}.out')
+        objective = Evaluator._parse(stdout)
+        return objective
 
     @staticmethod
     def _on_fail(job):

@@ -28,14 +28,31 @@ class Search:
         _args = vars(self.parse_args(''))
         _args.update(kwargs)
         _args['problem'] = problem
-        _args['run'] = run
+        _args['run'] = evaluator
+        _args['evaluator'] = evaluator
         self.args = Namespace(**_args)
-        self.problem = util.generic_loader(problem, 'Problem')
-        self.run_func = util.generic_loader(run, 'run')
-        logger.info('Evaluator will execute the function: '+run)
-        self.evaluator = Evaluator.create(self.run_func, method=evaluator)
-        self.num_workers = self.evaluator.num_workers
 
+        self.problem = util.generic_loader(problem, 'Problem')
+
+        # --run is passed, which means load the run function
+        if run is not None:
+            self.run_func = util.generic_loader(run, 'run')
+            self.run_cmd = None
+            assert self.args['run_cmd'] is None
+            assert evaluator != 'balsam-direct'
+            logger.info('Evaluator will execute the callable: '+run)
+            self.evaluator = Evaluator.create(self.run_func, method=evaluator)
+
+        # --run-cmd is passed, which means balsam-direct will launch the command-line
+        else:
+            self.run_func = None
+            self.run_cmd = self.args['run_cmd']
+            assert self.run_cmd is not None
+            assert evaluator == 'balsam-direct', f'{evaluator} Evaluator cannot use run-cmd'
+            logger.info('Evaluator will execute the command line: '+self.run_cmd)
+            self.evaluator = Evaluator.create(self.run_cmd, method='balsam-direct') 
+
+        self.num_workers = self.evaluator.num_workers
         logger.info(f'Options: '+pformat(self.args.__dict__, indent=4))
         logger.info('Hyperparameter space definition: '+pformat(self.problem.space, indent=4))
         logger.info(f'Created {self.args.evaluator} evaluator')
@@ -61,27 +78,25 @@ class Search:
     def _base_parser():
         parser = argparse.ArgumentParser()
         parser.add_argument("--problem",
-            default="deephyper.benchmark.hps.rosen2.problem.Problem"
+            required=True,
+            help="DeepHyper Problem instance that defines the search space",
         )
-        parser.add_argument("--run",
-            default="deephyper.benchmark.hps.rosen2.rosenbrock2.run"
+        group = parser.add_mutually_exclusive_group(required=True)
+        group.add_argument('--run',
+            help='''Dotted-Python path to callable that runs the
+            model. For example, "MyModels.mnist.cnn_model.run" will cause the function run() to
+            be imported from the `cnn_model` module inside the package `MyModels.mnist`.'''
         )
-        parser.add_argument("--backend",
-            default='tensorflow',
-            help="Keras backend module name"
-        )
-        parser.add_argument('--max-evals',
-            type=int, default=100,
-            help='maximum number of evaluations'
-        )
-        parser.add_argument('--eval-timeout-minutes',
-            type=int,
-            default=4096,
-            help="Kill evals that take longer than this"
+        group.add_argument('--run-cmd',
+            help='''Command line arguments to run the model executable. 
+            Only compatible with the balsam-direct Evaluator.
+            The hyperparameters will be appended to the command line as a JSON-formatted string.
+            It is the model code's responsibility to parse this JSON and pass it on to the
+            constructed model.'''
         )
         parser.add_argument('--evaluator',
             default='subprocess',
-            choices=['balsam', 'subprocess', 'processPool', 'threadPool'],
-            help="The evaluator is an object used to run the model."
+            choices=Evaluator.EVALUATOR_CHOICES,
+            help="Choose the type of evaluator to execute model evaluation tasks"
         )
         return parser
