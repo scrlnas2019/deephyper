@@ -95,7 +95,7 @@ class BalsamEvaluator(Evaluator):
                     workflow = self.workflow,
                     application = self.appName,
                     args = args,
-                    environ_vars = os.environ.copy() # propagates to model
+                    environ_vars = os.environ.copy(), # propagates to model
                     **self.run_resources
                    )
         logger.debug(f"Created job {jobname}")
@@ -109,7 +109,7 @@ class BalsamEvaluator(Evaluator):
     def _on_done(job): #def _on_done(job, process_data):
         # Objective in job.data?
         try: objective = float(job.data['dh-objective'])
-        except KeyError,ValueError: pass
+        except (KeyError,ValueError): pass
         else: return objective
 
         # Objective in postprocess.log ?

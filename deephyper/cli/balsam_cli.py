@@ -37,7 +37,7 @@ def read_ini(ini_path):
     _config.optionxform = str
     _config.read(fname)
     config = {}
-    sections = ('environ', 'job_resources', 'run_resources', 'search_resources')
+    sections = ('environ', 'run_resources', 'search_resources')
     for section in sections:
         config[section] = dict(_config[section])
     return config
@@ -72,12 +72,6 @@ def create_job(problem, run, run_cmd, workflow, **kwargs):
         run_resources[key] = int(run_resources[key])
         search_resources[key] = int(search_resources[key])
         
-    job_resources = kwargs['job_resources']
-    assert job_resources['job_mode'] in ['serial', 'mpi']
-    for key in 'num_nodes wall_time_minutes gpus_per_node'.split():
-        val = int(job_resources[key])
-        assert val >= 1
-        job_resources[key] = val
 
     envs = kwargs['environ'].copy()
     envs['DEEPHYPER_WORKERS_PER_NODE'] = run_resources['node_packing_count']
@@ -93,26 +87,12 @@ def create_job(problem, run, run_cmd, workflow, **kwargs):
         data = dict(run_resources=run_resources),
     )
 
-    print("Creating search job:")
-    print(search_job)
-    #search_job.save()
-
-    print("Launching job:")
-    qlaunch = QueuedLaunch(
-        project = job_resources['project'],
-        queue = job_resources['queue'],
-        nodes = job_resources['num_nodes'],
-        wall_minutes = job_resources['wall_time_minutes'],
-        job_mode = job_resources['job_mode'],
-        wf_filter = workflow,
-        prescheduled_only = False,
-    )
-    print(qlaunch)
-    #qlaunch.save()
-    #service.submit_qlaunch(qlaunch, verbose=True)
-
-
-    # must set DEEPHYPER_WORKERS_PER_NODE same as run node_packing_count
+    search_job.save()
+    print('\n*****')
+    print(f"Created {app_name} search task {search_job.cute_id} with workflow tag {workflow}")
+    print(f"Submit a Balsam job to run this search:")
+    print(f'balsam submit-launch --wf-filter {workflow} -n <nodes> -t <minutes> -q <queue> -A <project> --job-mode <mpi or serial>')
+    print('******\n')
 
 def add_base_args(subparser):
     p = subparser

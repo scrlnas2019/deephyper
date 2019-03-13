@@ -43,7 +43,7 @@ class Evaluator:
         Args:
             run: string commandline OR Python Callable object
         '''
-        assert method in EVALUATOR_CHOICES
+        assert method in Evaluator.EVALUATOR_CHOICES
 
         if method != 'balsam-direct': assert callable(run)
         else: assert isinstance(run, str)
@@ -88,7 +88,7 @@ class Evaluator:
             self._run_function = run
             self._run_cmd = None
             module = run.__module__
-            if moduleName == '__main__':
+            if module == '__main__':
                 raise RuntimeError(f'Evaluator will not execute function "{run_function.__name__}" '
                 "because it is in the __main__ module.  Please provide a function "
                 "imported from an external module!")

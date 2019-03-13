@@ -25,7 +25,7 @@ class Search:
         evaluator (str): in ['balsam', 'subprocess', 'processPool', 'threadPool']
     """
     def __init__(self, problem, run, evaluator, **kwargs):
-        _args = vars(self.parse_args(''))
+        _args = {}
         _args.update(kwargs)
         _args['problem'] = problem
         _args['run'] = evaluator
@@ -38,7 +38,7 @@ class Search:
         if run is not None:
             self.run_func = util.generic_loader(run, 'run')
             self.run_cmd = None
-            assert self.args['run_cmd'] is None
+            assert self.args.run_cmd is None
             assert evaluator != 'balsam-direct'
             logger.info('Evaluator will execute the callable: '+run)
             self.evaluator = Evaluator.create(self.run_func, method=evaluator)
@@ -46,7 +46,7 @@ class Search:
         # --run-cmd is passed, which means balsam-direct will launch the command-line
         else:
             self.run_func = None
-            self.run_cmd = self.args['run_cmd']
+            self.run_cmd = self.args.run_cmd
             assert self.run_cmd is not None
             assert evaluator == 'balsam-direct', f'{evaluator} Evaluator cannot use run-cmd'
             logger.info('Evaluator will execute the command line: '+self.run_cmd)
