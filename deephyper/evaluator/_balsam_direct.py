@@ -16,4 +16,4 @@ class BalsamDirectEvaluator(BalsamEvaluator):
             executable = run_cmd
         )
         if created:
-            logger.info(f"Created app {name} in Balsam DB to run the model")
+            logger.info(f"Created app {self.appName} in Balsam DB to run the model")
