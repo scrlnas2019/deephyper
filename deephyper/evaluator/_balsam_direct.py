@@ -10,9 +10,7 @@ class BalsamDirectEvaluator(BalsamEvaluator):
 
     def _init_app(self):
         run_cmd = self._run_cmd
-        self.appName = ' '.join(
-            os.path.basename(s) for s in shlex.split(run_cmd)
-        )
+        self.appName = run_cmd
         app, created = ApplicationDefinition.objects.get_or_create(
             name = self.appName,
             executable = run_cmd
