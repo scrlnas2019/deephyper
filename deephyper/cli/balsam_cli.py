@@ -20,10 +20,15 @@ def get_config(ini_path):
         if os.path.exists(user_ini):
             print("Loading runtime config from", user_ini)
         else:
-            print("Creating default runtime configuration in:", user_ini)
+            print("***************")
+            print("  Creating default runtime configuration in:", user_ini)
             dirname = os.path.dirname(user_ini)
             os.makedirs(dirname, exist_ok=True)
             shutil.copy(src=default_ini, dst=user_ini)
+            print("  Please edit this file to define a global runtime configuration, then re-run this command.")
+            print("  If you want to define a problem-specific configuration, create a copy of this file and pass it with the -c flag")
+            print("***************")
+            sys.exit(1)
         return read_ini(user_ini)
     else:
         if not os.path.isfile(ini_path):
@@ -59,7 +64,7 @@ def create_job(problem, run, run_cmd, workflow, **kwargs):
         args.append('--evaluator balsam')
     else:
         assert run_cmd is not None
-        args.append(f'--run-cmd {run_cmd}')
+        args.append(f'--run-cmd "{run_cmd}"')
         args.append('--evaluator balsam-direct')
 
     for arg in kwargs['search_defaults']:
