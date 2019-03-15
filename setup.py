@@ -193,7 +193,9 @@ setup(
      },
     install_requires=REQUIRED,
     extras_require=EXTRAS,
-    include_package_data=True,
+    package_data = {
+        'deephyper' : ['cli/*.ini']
+    },
     license='BSD',
     classifiers=[
         # Trove classifiers

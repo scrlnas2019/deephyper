@@ -14,19 +14,19 @@ SEARCH_APPS = {
 
 def get_config(ini_path):
     here = os.path.dirname(__file__)
-    default_ini = os.path.join(here, 'run.ini')
+    default_ini_list = glob.glob(os.path.join(here, '*.ini'))
     user_ini = os.path.expanduser('~/.deephyper/run.ini')
     if ini_path is None:
         if os.path.exists(user_ini):
             print("Loading runtime config from", user_ini)
         else:
             print("***************")
-            print("  Creating default runtime configuration in:", user_ini)
+            print("  Creating default runtime configurations in ~/.deephyper:")
             dirname = os.path.dirname(user_ini)
             os.makedirs(dirname, exist_ok=True)
-            shutil.copy(src=default_ini, dst=user_ini)
+            for default_ini in default_ini_list: shutil.copy(src=default_ini, dst=dirname)
             print("  Please edit this file to define a global runtime configuration, then re-run this command.")
-            print("  If you want to define a problem-specific configuration, create a copy of this file and pass it with the -c flag")
+            print("  If you want to use a problem-specific configuration, create a copy of this file and pass it with the -c flag")
             print("***************")
             sys.exit(1)
         return read_ini(user_ini)
