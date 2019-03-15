@@ -17,9 +17,7 @@ def get_config(ini_path):
     default_ini_list = glob.glob(os.path.join(here, '*.ini'))
     user_ini = os.path.expanduser('~/.deephyper/run.ini')
     if ini_path is None:
-        if os.path.exists(user_ini):
-            print("Loading runtime config from", user_ini)
-        else:
+        if not os.path.exists(user_ini):
             print("***************")
             print("  Creating default runtime configurations in ~/.deephyper:")
             dirname = os.path.dirname(user_ini)
@@ -163,12 +161,14 @@ def build_parser():
     return root_parser
 
 def main():
+    config = get_config(None)
     parser = build_parser()
     if len(sys.argv) == 1:
         parser.print_help()
         sys.exit(1)
     args = parser.parse_args()
-    config = get_config(args.config_file)
+    if args.config_file is not None:
+        config = get_config(args.config_file)
     config.update(vars(args))
     create_job(**config)
 
