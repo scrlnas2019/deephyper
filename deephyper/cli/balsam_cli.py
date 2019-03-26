@@ -1,4 +1,5 @@
 import argparse
+import glob
 from importlib import import_module
 import os
 import shutil
@@ -40,7 +41,7 @@ def read_ini(ini_path):
     _config.optionxform = str
     _config.read(fname)
     config = {}
-    sections = ('environ', 'run_resources', 'search_resources')
+    sections = ('search_environ', 'run_environ', 'run_resources', 'search_resources')
     for section in sections:
         config[section] = dict(_config[section])
     return config
@@ -55,8 +56,10 @@ def create_job(problem, run, run_cmd, workflow, **kwargs):
     if created:
         print(f"Created app {app_name} in the Balsam DB (ID {app.pk})")
 
+    if os.path.isfile(problem): problem = os.path.abspath(os.path.expanduser(problem))
     args = [f'--problem {problem}']
     if run is not None:
+        if os.path.isfile(run): run = os.path.abspath(os.path.expanduser(run))
         assert run_cmd is None
         args.append(f'--run {run}')
         args.append('--evaluator balsam')
@@ -71,14 +74,17 @@ def create_job(problem, run, run_cmd, workflow, **kwargs):
 
     run_resources = kwargs['run_resources']
     search_resources = kwargs['search_resources']
-    for key in 'num_nodes ranks_per_node threads_per_rank node_packing_count'.split():
-        run_resources[key] = int(run_resources[key])
-        search_resources[key] = int(search_resources[key])
+    for key in 'num_nodes ranks_per_node threads_per_rank threads_per_core node_packing_count'.split():
+        run_resources[key] = int(run_resources.get(key, 1))
+        search_resources[key] = int(search_resources.get(key, 1))
         
+    run_envs = kwargs['run_environ'].copy()
+    run_resources['environ_vars'] =' '.join(f'{key}={val}' for key,val in run_envs.items())
 
-    envs = kwargs['environ'].copy()
-    envs['DEEPHYPER_WORKERS_PER_NODE'] = run_resources['node_packing_count']
-    environ_vars = ':'.join(f'{key}={val}' for key,val in envs.items())
+    search_envs = kwargs['search_environ'].copy()
+    search_envs['DEEPHYPER_WORKERS_PER_NODE'] = run_resources['node_packing_count']
+    environ_vars = ' '.join(f'{key}={val}' for key,val in search_envs.items())
+
 
     search_job = BalsamJob(
         name = app_name,

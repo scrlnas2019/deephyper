@@ -95,7 +95,6 @@ class BalsamEvaluator(Evaluator):
                     workflow = self.workflow,
                     application = self.appName,
                     args = args,
-                    environ_vars = os.environ.copy(), # propagates to model
                     **self.run_resources
                    )
         logger.debug(f"Created job {jobname}")

@@ -36,7 +36,10 @@ class Search:
 
         # --run is passed, which means load the run function
         if run is not None:
-            self.run_func = util.generic_loader(run, 'run')
+            if 'balsam' not in evaluator:
+                self.run_func = util.generic_loader(run, 'run')
+            else:
+                self.run_func = run
             self.run_cmd = None
             assert self.args.run_cmd is None
             assert evaluator != 'balsam-direct'

@@ -45,7 +45,7 @@ class Evaluator:
         '''
         assert method in Evaluator.EVALUATOR_CHOICES
 
-        if method != 'balsam-direct': assert callable(run)
+        if 'balsam' not in method: assert callable(run)
         else: assert isinstance(run, str)
 
         if method == "balsam":
